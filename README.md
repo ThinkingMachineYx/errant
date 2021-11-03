@@ -1,3 +1,34 @@
+# ERRANT+ (forked from ERRANT v2.3.0)
+
+This repository is modified to fit with the conversational grammar error correction dataset. Two features are added.
+
+## Granularity
+
+In the paper, we defined the importance of edits according to their importance.
+
+- 1: Trivial: punctuations (except apostrophe), casing
+- 2: Moderate: informal words (abbreviations), apostrophe for contraction
+- 3: Major: grammatically incorrect
+
+ERRANT+ can automatically label the importance level of edits, except that informal scenario in level 2 cannot be recognized because of its complexity.
+
+## Rules of Equivalent Class
+
+Users can also define a class of words that can be considered equivalent. For example, "it's" and "it is" are the same, therefore it should be considered equivalent to be edited to either of these two.
+
+The equivalent rules should be provided in a .json file consisting a list of lists, where each list represents an equivalent class. 
+
+Example:
+
+```json
+[
+  ["it's", "it is"],
+  ["'s", "is"]
+]
+```
+
+# Original README
+
 # ERRANT v2.3.0
 
 This repository contains the grammatical ERRor ANnotation Toolkit (ERRANT) described in:
