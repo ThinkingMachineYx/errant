@@ -95,6 +95,14 @@ def parse_args():
             "3: Show all category scores; e.g. R:NOUN.",
         choices=[1, 2, 3],
         type=int)
+    parser.add_argument(
+        "-gran",
+        help="Consider only edits that have higher or equal level than the given one.\n"
+            "1: Trivial: punctuations (except apostrophe), casing;\n"
+            "2: Moderate: informal words (abbreviations), apostrophe for contraction\n"
+            "3: Major: grammatically incorrect",
+        choices=[1, 2, 3],
+        type=int)
     args = parser.parse_args()
     return args
 
@@ -113,8 +121,9 @@ def simplify_edits(sent):
         end = int(span[1])
         cat = edit[1]
         cor = edit[2]
+        importance = int(edit[3]) if edit[3].isalnum() else 0
         coder = int(edit[-1])
-        out_edit = [start, end, cat, cor, coder]
+        out_edit = [start, end, cat, cor, importance, coder]
         out_edits.append(out_edit)
     return out_edits
 
@@ -132,7 +141,8 @@ def process_edits(edits, args):
         end = edit[1]
         cat = edit[2]
         cor = edit[3]
-        coder = edit[4]
+        importance = edit[4]
+        coder = edit[5]
         # Add the coder to the coder_dict if necessary
         if coder not in coder_dict: coder_dict[coder] = {}
 
@@ -145,6 +155,8 @@ def process_edits(edits, args):
         if args.multi and end-start < 2 and len(cor.split()) < 2: continue
         # 4. If there is a filter, ignore the specified error types
         if args.filt and cat in args.filt: continue
+        # 5. If granularity is offered, ignore less important errors
+        if args.gran and importance and importance >= args.gran: continue
 
         # Token Based Detection
         if args.dt:

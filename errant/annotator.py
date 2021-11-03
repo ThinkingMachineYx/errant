@@ -9,11 +9,12 @@ class Annotator:
     # Input 2: A spacy processing object for the language
     # Input 3: A merging module for the language
     # Input 4: A classifier module for the language
-    def __init__(self, lang, nlp=None, merger=None, classifier=None):
+    def __init__(self, lang, nlp=None, merger=None, classifier=None, sorter=None):
         self.lang = lang
         self.nlp = nlp
         self.merger = merger
         self.classifier = classifier
+        self.sorter = sorter
 
     # Input 1: A text string
     # Input 2: A flag for word tokenisation
@@ -61,6 +62,11 @@ class Annotator:
     def classify(self, edit):
         return self.classifier.classify(edit)
 
+    # Input: An Edit object
+    # Output: The same Edit object with an updated error importance
+    def sort(self, edit):
+        return self.sorter.sort(edit)
+
     # Input 1: An original text string parsed by spacy
     # Input 2: A corrected text string parsed by spacy
     # Input 3: A flag for standard Levenshtein alignment
@@ -71,6 +77,7 @@ class Annotator:
         edits = self.merge(alignment, merging)
         for edit in edits:
             edit = self.classify(edit)
+            edit = self.sort(edit)
         return edits
 
     # Input 1: An original text string parsed by spacy
