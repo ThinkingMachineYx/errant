@@ -88,3 +88,7 @@ def parse_args():
 # Output: A noop edit; i.e. text contains no edits
 def noop_edit(id=0):
     return "A -1 -1|||noop|||-NONE-|||REQUIRED|||-NONE-|||"+str(id)
+
+if __name__ == "__main__":
+    # Run the program
+    main()
