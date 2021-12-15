@@ -14,11 +14,13 @@ conts_expanded = {
 # Input: An Edit object
 # Output: Whether the Edit adds apostrophe to a contraction token
 # e.g. nt -> n't
+#      its -> it 's
 def add_apostr_for_cont(edit):
     # Check token number
-    if len(edit.c_toks) == 1 and len(edit.o_toks) == 1:
+    if len(edit.o_toks) and len(edit.c_toks):
         return edit.c_toks[-1].lower_ in conts and \
-               edit.o_toks[0].lower_ == "".join([x.lower_ for x in edit.c_toks]).replace("'", "")
+               "".join([x.lower_ for x in edit.o_toks]) == \
+               "".join([x.lower_ for x in edit.c_toks]).replace("'", "")
     else:
         return False
 

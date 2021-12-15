@@ -139,7 +139,7 @@ def simplify_edits(sent):
 def process_edits(edits, args):
     coder_dict = {}
     # Add an explicit noop edit if there are no edits.
-    if not edits: edits = [[-1, -1, "noop", "-NONE-", 0]]
+    if not edits: edits = [[-1, -1, "noop", "-NONE-", 0, 0]]
     # Loop through the edits
     for edit in edits:
         # Name the edit elements for clarity
@@ -162,7 +162,7 @@ def process_edits(edits, args):
         # 4. If there is a filter, ignore the specified error types
         if args.filt and cat in args.filt: continue
         # 5. If granularity is offered, ignore less important errors
-        if args.gran and importance and importance >= args.gran: continue
+        if args.gran and importance and importance < args.gran: continue
 
         # Token Based Detection
         if args.dt:
@@ -282,9 +282,9 @@ def evaluate_edits(hyp_dict, ref_dict, best, sent_id, args):
 
 # Input 1: A dictionary of edits.
 # Input 2: Equivalence rules.
-# Output 1: The list of alternatives.
+# Output 1: The map of alternatives with original edits.
 def computeAlter(edits, rules):
-    edits_alt = []
+    edits_alt = {}
     if not rules: return edits_alt
     for edit, cats in edits.items():
         # noop ref edits are ignored
@@ -292,9 +292,10 @@ def computeAlter(edits, rules):
         # Valid edits
         for equiv in rules:
             if edit[-1] in equiv:
-                # Add alternatives to reference list
+                # Add alternatives to reference map
                 for alt in equiv:
-                    edits_alt.append((edit[0], edit[1], alt))
+                    if edit[-1] != alt:
+                        edits_alt[(edit[0], edit[1], alt)] = edit
     return edits_alt
 
 # Input 1: A dictionary of hypothesis edits for a single system.
@@ -315,8 +316,11 @@ def compareEdits(hyp_edits, ref_edits, rules):
     for h_edit, h_cats in hyp_edits.items():
         # noop hyp edits cannot be TP or FP
         if h_cats[0] == "noop": continue
+        # change to original edit
+        if h_edit in hyp_edits_alt.keys():
+            h_edit = hyp_edits_alt[h_edit]
         # TRUE POSITIVES
-        if h_edit in ref_edits.keys() or h_edit in ref_edits_alt:
+        if h_edit in ref_edits.keys():
             # On occasion, multiple tokens at same span.
             for h_cat in ref_edits[h_edit]: # Use ref dict for TP
                 tp += 1
@@ -338,8 +342,11 @@ def compareEdits(hyp_edits, ref_edits, rules):
     for r_edit, r_cats in ref_edits.items():
         # noop ref edits cannot be FN
         if r_cats[0] == "noop": continue
+        # change to original edit
+        if r_edit in ref_edits_alt.keys():
+            r_edit = ref_edits_alt[r_edit]
         # FALSE NEGATIVES
-        if r_edit not in hyp_edits.keys() and r_edit not in hyp_edits_alt:
+        if r_edit not in hyp_edits.keys():
             # On occasion, multiple tokens at same span.
             for r_cat in r_cats:
                 fn += 1
