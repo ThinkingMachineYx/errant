@@ -176,10 +176,14 @@ def get_two_sided_type(o_toks, c_toks):
         if o_toks[0].tag_ == "POS" or c_toks[0].tag_ == "POS":
             return "NOUN:POSS"
         # Contraction. Rule must come after possessive.
+        # Punctuation is also possible, for example adding apostrophe in a contraction.
         if (o_toks[0].lower_ in conts or \
                 c_toks[0].lower_ in conts) and \
                 o_pos == c_pos:
-            return "CONTR"
+            if o_toks[0].lower_ == c_toks[0].lower_.replace("'", ""):
+                return "PUNCT"
+            else:
+                return "CONTR"
         # Special auxiliaries in contractions (1); e.g. ca -> can, wo -> will
         # Rule was broken in V1. Turned off this fix for compatibility.
         if (o_toks[0].lower_ in aux_conts and \

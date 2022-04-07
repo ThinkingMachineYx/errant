@@ -1,5 +1,7 @@
 import argparse
+import json
 from collections import Counter
+import spacy
 
 def main():
     # Parse command line args
@@ -95,6 +97,18 @@ def parse_args():
             "3: Show all category scores; e.g. R:NOUN.",
         choices=[1, 2, 3],
         type=int)
+    parser.add_argument(
+        "-gran",
+        help="Consider only edits that have higher or equal level than the given one.\n"
+            "1: Trivial: punctuations (except apostrophe), casing;\n"
+            "2: Moderate: informal words (abbreviations), apostrophe for contraction\n"
+            "3: Major: grammatically incorrect",
+        choices=[1, 2, 3],
+        type=int)
+    parser.add_argument(
+        "-rule",
+        help="Json file that contain equivalence rules.\n",
+        type=str)
     args = parser.parse_args()
     return args
 
@@ -113,8 +127,9 @@ def simplify_edits(sent):
         end = int(span[1])
         cat = edit[1]
         cor = edit[2]
+        importance = int(edit[3]) if edit[3].isnumeric() else 0
         coder = int(edit[-1])
-        out_edit = [start, end, cat, cor, coder]
+        out_edit = [start, end, cat, cor, importance, coder]
         out_edits.append(out_edit)
     return out_edits
 
@@ -124,7 +139,7 @@ def simplify_edits(sent):
 def process_edits(edits, args):
     coder_dict = {}
     # Add an explicit noop edit if there are no edits.
-    if not edits: edits = [[-1, -1, "noop", "-NONE-", 0]]
+    if not edits: edits = [[-1, -1, "noop", "-NONE-", 0, 0]]
     # Loop through the edits
     for edit in edits:
         # Name the edit elements for clarity
@@ -132,7 +147,8 @@ def process_edits(edits, args):
         end = edit[1]
         cat = edit[2]
         cor = edit[3]
-        coder = edit[4]
+        importance = edit[4]
+        coder = edit[5]
         # Add the coder to the coder_dict if necessary
         if coder not in coder_dict: coder_dict[coder] = {}
 
@@ -145,6 +161,8 @@ def process_edits(edits, args):
         if args.multi and end-start < 2 and len(cor.split()) < 2: continue
         # 4. If there is a filter, ignore the specified error types
         if args.filt and cat in args.filt: continue
+        # 5. If granularity is offered, ignore less important errors
+        if args.gran and importance and importance < args.gran: continue
 
         # Token Based Detection
         if args.dt:
@@ -199,6 +217,18 @@ def process_edits(edits, args):
 # Output 1: A dict of the best corpus level TP, FP and FN for the input sentence.
 # Output 2: The corresponding error type dict for the above dict.
 def evaluate_edits(hyp_dict, ref_dict, best, sent_id, args):
+    # Load equivalence rules
+    if args.rule:
+        with open(args.rule, "r") as f:
+            rules = json.load(f)
+        # tokenize rules
+        nlp = spacy.load("en")
+        for equiv in rules:
+            for i in range(len(equiv)):
+                text = nlp(equiv[i])
+                equiv[i] = " ".join([x.text for x in text])
+    else:
+        rules = []
     # Store the best sentence level scores and hyp+ref combination IDs
     # best_f is initialised as -1 cause 0 is a valid result.
     best_tp, best_fp, best_fn, best_f, best_hyp, best_ref = 0, 0, 0, -1, 0, 0
@@ -207,7 +237,7 @@ def evaluate_edits(hyp_dict, ref_dict, best, sent_id, args):
     for hyp_id in hyp_dict.keys():
         for ref_id in ref_dict.keys():
             # Get the local counts for the current combination.
-            tp, fp, fn, cat_dict = compareEdits(hyp_dict[hyp_id], ref_dict[ref_id])
+            tp, fp, fn, cat_dict = compareEdits(hyp_dict[hyp_id], ref_dict[ref_id], rules)
             # Compute the local sentence scores (for verbose output only)
             loc_p, loc_r, loc_f = computeFScore(tp, fp, fn, args.beta)
             # Compute the global sentence scores
@@ -250,19 +280,45 @@ def evaluate_edits(hyp_dict, ref_dict, best, sent_id, args):
     best_dict = {"tp":best_tp, "fp":best_fp, "fn":best_fn}
     return best_dict, best_cat
 
+# Input 1: A dictionary of edits.
+# Input 2: Equivalence rules.
+# Output 1: The map of alternatives with original edits.
+def computeAlter(edits, rules):
+    edits_alt = {}
+    if not rules: return edits_alt
+    for edit, cats in edits.items():
+        # noop ref edits are ignored
+        if cats[0] == "noop": continue
+        # Valid edits
+        for equiv in rules:
+            if edit[-1] in equiv:
+                # Add alternatives to reference map
+                for alt in equiv:
+                    if edit[-1] != alt:
+                        edits_alt[(edit[0], edit[1], alt)] = edit
+    return edits_alt
+
 # Input 1: A dictionary of hypothesis edits for a single system.
 # Input 2: A dictionary of reference edits for a single annotator.
+# Input 3: Equivalence rules.
 # Output 1-3: The TP, FP and FN for the hyp vs the given ref annotator.
 # Output 4: A dictionary of the error type counts.
-def compareEdits(hyp_edits, ref_edits):    
+def compareEdits(hyp_edits, ref_edits, rules):
     tp = 0    # True Positives
     fp = 0    # False Positives
     fn = 0    # False Negatives
     cat_dict = {} # {cat: [tp, fp, fn], ...}
 
+    # Pre-process reference edits to include equivalent alternatives
+    hyp_edits_alt = computeAlter(hyp_edits, rules)
+    ref_edits_alt = computeAlter(ref_edits, rules)
+
     for h_edit, h_cats in hyp_edits.items():
         # noop hyp edits cannot be TP or FP
         if h_cats[0] == "noop": continue
+        # change to original edit
+        if h_edit in hyp_edits_alt.keys():
+            h_edit = hyp_edits_alt[h_edit]
         # TRUE POSITIVES
         if h_edit in ref_edits.keys():
             # On occasion, multiple tokens at same span.
@@ -286,6 +342,9 @@ def compareEdits(hyp_edits, ref_edits):
     for r_edit, r_cats in ref_edits.items():
         # noop ref edits cannot be FN
         if r_cats[0] == "noop": continue
+        # change to original edit
+        if r_edit in ref_edits_alt.keys():
+            r_edit = ref_edits_alt[r_edit]
         # FALSE NEGATIVES
         if r_edit not in hyp_edits.keys():
             # On occasion, multiple tokens at same span.

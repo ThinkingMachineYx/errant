@@ -3,7 +3,7 @@ import spacy
 from errant.annotator import Annotator
 
 # ERRANT version
-__version__ = '2.3.0'
+__version__ = '3.0.0'
 
 # Load an ERRANT Annotator object for a given language
 def load(lang, nlp=None):
@@ -18,10 +18,11 @@ def load(lang, nlp=None):
     # Load language edit merger
     merger = import_module("errant.%s.merger" % lang)
 
-    # Load language edit classifier
+    # Load language edit classifier and sorter
     classifier = import_module("errant.%s.classifier" % lang)
+    sorter = import_module("errant.%s.sorter" % lang)
     # The English classifier needs spacy
     if lang == "en": classifier.nlp = nlp
 
     # Return a configured ERRANT annotator
-    return Annotator(lang, nlp, merger, classifier)
+    return Annotator(lang, nlp, merger, classifier, sorter)
